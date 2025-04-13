@@ -1,5 +1,6 @@
 import jpeg_toolbox
 import random
+import numpy as np
 from hash_utils import generate_hash
 from db_utils import store_hash_and_message_in_db
 
@@ -21,14 +22,24 @@ def cifrar():
 
     # Convertir hash a bits
     hash_bits = hash_to_bits(hash_128)
-
     print(f"bitshash: {hash_bits}")
 
     # Cargar imagen JPEG
     img = jpeg_toolbox.load(input_image)
 
-    # Seleccionar coeficientes de bloques 8x8 del canal Y
-    cover = img['coef_arrays'][0][::8, ::8]
+    # Obtener tabla de cuantificación real de la imagen
+    quant_table = img['quant_tables'][0]
+
+    # Multiplicar coeficientes por la tabla de cuantificación
+    coef_array = img['coef_arrays'][0].copy()
+    for i in range(0, coef_array.shape[0], 8):
+        for j in range(0, coef_array.shape[1], 8):
+            block = coef_array[i:i+8, j:j+8]
+            if block.shape == (8, 8):
+                coef_array[i:i+8, j:j+8] = block * quant_table
+
+    # Seleccionar bloques 8x8 del canal Y modificados
+    cover = coef_array[::8, ::8]
     shape = cover.shape
     cover = cover.flatten()
     stego = cover.copy()
@@ -38,8 +49,18 @@ def cifrar():
         if cover[i] % 2 != hash_bits[i]:
             stego[i] = cover[i] + random.choice([-7, 7])
 
-    # Reconstruir y guardar imagen
-    img['coef_arrays'][0][::8, ::8] = stego.reshape(shape)
+    # Restaurar los valores en coef_array
+    coef_array[::8, ::8] = stego.reshape(shape)
+
+    # Dividir por la tabla de cuantificación (restauración final)
+    for i in range(0, coef_array.shape[0], 8):
+        for j in range(0, coef_array.shape[1], 8):
+            block = coef_array[i:i+8, j:j+8]
+            if block.shape == (8, 8):
+                coef_array[i:i+8, j:j+8] = block // quant_table  # División entera
+
+    # Guardar en imagen final
+    img['coef_arrays'][0] = coef_array
     jpeg_toolbox.save(img, output_image)
     print("Hash oculto y guardado en 'output.jpeg'.")
 
