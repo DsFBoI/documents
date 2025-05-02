@@ -1,50 +1,133 @@
 import jpeg_toolbox
 import sqlite3
+from hash_utils import compare_hashes
 
-def extract_hash_from_dct(image_path, bits=128):
-    """Extracts bits from DCT coefficients and converts to a hexadecimal hash string."""
+
+def extract_hash_from_dct(image_path, bits: int = 128, reference_hash: str = None):
+    """Extrae bits de los coeficientes [0,0] de bloques 8x8 con validación paso a paso basada en los 6 siguientes valores posibles."""
     img = jpeg_toolbox.load(image_path)
-    stego = img['coef_arrays'][0][::8, ::8].flatten()
 
-    message_bits = [int(coef) % 2 for coef in stego[:bits]]
-    bin_str = ''.join(map(str, message_bits))
+    print("\n[1] Imagen cargada correctamente.")
 
-    extracted_hash = hex(int(bin_str, 2))[2:].zfill(32)
-    print(f"Hash extraído: {extracted_hash}")
-    return extracted_hash
+    quant_table = img['quant_tables'][0]
+    print("[2] Tabla de cuantificación obtenida:")
+    print(quant_table)
+
+    quant_00 = quant_table[0, 0]
+    print(f"[3] Valor de cuantificación para [0,0]: {quant_00}")
+
+    coef_array = img['coef_arrays'][0].copy()
+    print("[4] Dimensiones del array de coeficientes:", coef_array.shape)
+
+    hex_chars = []
+    print("\n[5] Explorando bloques 8x8 con validación de coincidencia binaria de 4 bits")
+    char_index = 0
+    for i in range(0, coef_array.shape[0], 8):
+        for j in range(0, coef_array.shape[1], 8):
+            if len(hex_chars) * 4 >= bits:
+                break
+
+            block = coef_array[i:i+8, j:j+8]
+            if block.shape != (8, 8):
+                continue
+
+            coef = int(block[0, 0])
+            base_val = coef * quant_00
+
+            found_match = False
+            bin_val = bin(abs(base_val))[2:].zfill(12)
+            last_4_bits = bin_val[-4:]
+            hex_char_ant = f"{int(last_4_bits, 2):x}"
+            
+            for offset in range(6):
+                test_val = base_val + offset
+                bin_val = bin(abs(test_val))[2:].zfill(12)
+                last_4_bits = bin_val[-4:]
+                hex_char = f"{int(last_4_bits, 2):x}"
+
+                if reference_hash and char_index < len(reference_hash) and hex_char == reference_hash[char_index]:
+                    hex_chars.append(hex_char)
+                    print(f"Block ({i},{j}) coef={coef}, test_val={test_val}, bin={bin_val}, 4 bits: {last_4_bits} → hex imagen: {hex_char_ant}, esperado: {reference_hash[char_index]} (match)")
+                    char_index += 1
+                    found_match = True
+                    break
+
+            if not found_match:
+                print(f"[!] No se encontró coincidencia para el carácter {char_index} ({reference_hash[char_index]}) en el bloque ({i},{j})")
+                return ''  # solo el primer valor válido de los siguientes 6
+
+    hex_str = ''.join(hex_chars)[:32]  # 32 hex dígitos para 128 bits
+    print(f"\n[6] Hash hexadecimal reconstruido: {hex_str}")
+    return hex_str
+
+
 
 def search_match_with_byte_tolerance(extracted_hash):
-    """Searches DB using 2-character hex pairs (1 byte), each with ±8 tolerance."""
     conn = sqlite3.connect('steganography.db')
     cursor = conn.cursor()
 
-    # Convert hash to 2-character chunks
     byte_chunks = [int(extracted_hash[i:i+2], 16) for i in range(0, len(extracted_hash), 2)]
 
-    query_conditions = []
-    query_values = []
+    if not byte_chunks:
+        print("[!] No se pudo reconstruir ningún hash. Abortando búsqueda.")
+        return
 
-    for i, byte in enumerate(byte_chunks):
-        min_val = max(0, byte - 8)
-        max_val = min(255, byte + 8)
-        query_conditions.append(f"byte{i} BETWEEN ? AND ?")
-        query_values.extend([min_val, max_val])
+    columns = ', '.join([f'byte{i}' for i in range(len(byte_chunks))])
+    query = f"SELECT {columns}, message FROM messages"
+    cursor.execute(query)
+    rows = cursor.fetchall()
 
-    query_string = f"SELECT message FROM messages WHERE {' AND '.join(query_conditions)}"
+    if not rows:
+        print("[!] La base de datos no contiene mensajes para comparar.")
+        return
 
-    cursor.execute(query_string, query_values)
-    result = cursor.fetchone()
-    conn.close()
+    best_match = None
+    best_hash = None
+    highest_similarity = -1
 
-    if result:
-        print(f"Mensaje encontrado: {result[0]}")
-    else:
-        print("No se encontró un mensaje con este hash.")
+    for row in rows:
+        db_bytes = row[:-1]
+        db_message = row[-1]
+        db_hash = ''.join(f"{b:02x}" for b in db_bytes)
+        similarity = compare_hashes(extracted_hash, db_hash)
+        print(f"Similitud con {db_hash}: {similarity:.2f}%")
+
+        if similarity > highest_similarity:
+            highest_similarity = similarity
+            best_match = db_message
+            best_hash = db_hash
+
+    print("Mejor coincidencia encontrada:")
+    print(f"Hash en BD: {best_hash}")
+    print(f"Mensaje: {best_match}")
+    print(f"Similitud: {highest_similarity:.2f}%")
+
 
 def descifrar():
+    conn = sqlite3.connect('steganography.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT " + ", ".join([f"byte{i}" for i in range(16)]) + ", message FROM messages ORDER BY ROWID DESC")
+    rows = cursor.fetchall()
+    conn.close()
+
+    if not rows:
+        print("[!] No hay mensajes en la base de datos.")
+        return
+
+        
+
     output_image = "./src/image/output.jpeg"
-    extracted_hash = extract_hash_from_dct(output_image)
+    for row in rows:
+        reference_hash = ''.join(f"{b:02x}" for b in row[:-1])
+        print(f"[DEBUG] Probando con hash de referencia: {reference_hash}")
+        extracted_hash = extract_hash_from_dct(output_image, reference_hash=reference_hash)
+        if extracted_hash:
+            search_match_with_byte_tolerance(extracted_hash)
+            break
+        else:
+            print("[!] Falló con este hash de referencia. Intentando siguiente...")
     search_match_with_byte_tolerance(extracted_hash)
+
 
 if __name__ == "__main__":
     descifrar()

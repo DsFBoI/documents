@@ -11,58 +11,69 @@ def hash_to_bits(hash_hex):
 def cifrar():
     input_image = './src/image/input.jpeg'
     output_image = './src/image/output.jpeg'
-    message = "cuando el grajo vuela bajo hace un frio del carajo 123"
+    message = "hola que tal estas"
 
-    # Generar hash de 128 bits del mensaje
+    # [1] Generar hash de 128 bits del mensaje
     hash_128 = generate_hash(message, bits=128)
-    print(f"Hash generado (128 bits): {hash_128}")
+    print(f"[1] Hash generado (128 bits): {hash_128}")
 
-    # Guardar hash y mensaje en la base de datos
+    # [2] Guardar hash y mensaje en la base de datos
     store_hash_and_message_in_db(hash_128, message)
 
-    # Convertir hash a bits
+    # [3] Convertir hash a bits
     hash_bits = hash_to_bits(hash_128)
-    print(f"bitshash: {hash_bits}")
+    print(f"[3] Hash en bits: {hash_bits}\n")
 
-    # Cargar imagen JPEG
+    # [4] Cargar imagen JPEG
     img = jpeg_toolbox.load(input_image)
+    print("[4] Imagen cargada correctamente")
 
-    # Obtener tabla de cuantificación real de la imagen
+    # [5] Obtener tabla de cuantificación y coeficientes
     quant_table = img['quant_tables'][0]
-
-    # Multiplicar coeficientes por la tabla de cuantificación
+    quant_00 = quant_table[0, 0]
     coef_array = img['coef_arrays'][0].copy()
+    print("[5] Tabla de cuantificación obtenida y coeficientes copiados")
+
+    # [6] Incrustar los bits del hash (4 bits por bloque)
+    bit_idx = 0
     for i in range(0, coef_array.shape[0], 8):
         for j in range(0, coef_array.shape[1], 8):
+            if bit_idx >= len(hash_bits):
+                break
+
             block = coef_array[i:i+8, j:j+8]
-            if block.shape == (8, 8):
-                coef_array[i:i+8, j:j+8] = block * quant_table
+            if block.shape != (8, 8):
+                continue
 
-    # Seleccionar bloques 8x8 del canal Y modificados
-    cover = coef_array[::8, ::8]
-    shape = cover.shape
-    cover = cover.flatten()
-    stego = cover.copy()
+            original_coef = int(block[0, 0])
+            quantized = original_coef * quant_00
+            is_negative = quantized < 0
+            bin_value = list(bin(abs(quantized))[2:].zfill(12))
 
-    # Incrustar los bits en los LSB de los coeficientes DCT
-    for i in range(len(hash_bits)):
-        if cover[i] % 2 != hash_bits[i]:
-            stego[i] = cover[i] + random.choice([-7, 7])
+            bits_to_embed = hash_bits[bit_idx:bit_idx+4]
+            old_bits = bin_value[-4:]
+            for k in range(4):
+                if bit_idx + k < len(hash_bits):
+                    bin_value[-4 + k] = str(bits_to_embed[k])
+            bit_idx += 4
 
-    # Restaurar los valores en coef_array
-    coef_array[::8, ::8] = stego.reshape(shape)
+            new_value = int(''.join(bin_value), 2)
+            if is_negative:
+                new_value = -new_value
 
-    # Dividir por la tabla de cuantificación (restauración final)
-    for i in range(0, coef_array.shape[0], 8):
-        for j in range(0, coef_array.shape[1], 8):
-            block = coef_array[i:i+8, j:j+8]
-            if block.shape == (8, 8):
-                coef_array[i:i+8, j:j+8] = block // quant_table  # División entera
+            new_coef = new_value // quant_00
+            block[0, 0] = new_coef
+            coef_array[i:i+8, j:j+8] = block
 
-    # Guardar en imagen final
+            print(f"[6] Block ({i},{j})")
+            print(f"     Original coef: {original_coef}, Quantized: {quantized}")
+            print(f"     Binario antes: {''.join(old_bits)}, después: {''.join(bin_value[-4:])}")
+            print(f"     Nuevo valor: {new_value}, Nuevo coef: {new_coef}\n")
+
+    # [7] Guardar coeficientes modificados en la imagen
     img['coef_arrays'][0] = coef_array
     jpeg_toolbox.save(img, output_image)
-    print("Hash oculto y guardado en 'output.jpeg'.")
+    print("[7] Hash oculto y guardado en 'output.jpeg'.")
 
 if __name__ == "__main__":
     cifrar()
