@@ -1,5 +1,7 @@
 import jpeg_toolbox
 import sqlite3
+
+import mysql.connector
 from hash_utils import compare_hashes
 
 
@@ -63,13 +65,22 @@ def extract_hash_from_dct(image_path, bits: int = 128, reference_hash: str = Non
 
 
 def search_match_with_byte_tolerance(extracted_hash):
-    conn = sqlite3.connect('steganography.db')
+    import os
+
+    conn = mysql.connector.connect(
+    host=os.getenv("DB_HOST"),
+    port=int(os.getenv("DB_PORT")),
+    user=os.getenv("DB_USER"),
+    password=os.getenv("DB_PASS"),
+    database=os.getenv("DB_NAME")
+    )
+
     cursor = conn.cursor()
 
     byte_chunks = [int(extracted_hash[i:i+2], 16) for i in range(0, len(extracted_hash), 2)]
 
     if not byte_chunks:
-        print("[!] No se pudo reconstruir ningún hash. Abortando búsqueda.")
+        print("[!] No hash reconstructed. Aborting search.")
         return
 
     columns = ', '.join([f'byte{i}' for i in range(len(byte_chunks))])
@@ -78,7 +89,7 @@ def search_match_with_byte_tolerance(extracted_hash):
     rows = cursor.fetchall()
 
     if not rows:
-        print("[!] La base de datos no contiene mensajes para comparar.")
+        print("[!] Database has no messages to compare.")
         return
 
     best_match = None
@@ -90,42 +101,51 @@ def search_match_with_byte_tolerance(extracted_hash):
         db_message = row[-1]
         db_hash = ''.join(f"{b:02x}" for b in db_bytes)
         similarity = compare_hashes(extracted_hash, db_hash)
-        print(f"Similitud con {db_hash}: {similarity:.2f}%")
+        print(f"Similarity with {db_hash}: {similarity:.2f}%")
 
         if similarity > highest_similarity:
             highest_similarity = similarity
             best_match = db_message
             best_hash = db_hash
 
-    print("Mejor coincidencia encontrada:")
-    print(f"Hash en BD: {best_hash}")
-    print(f"Mensaje: {best_match}")
-    print(f"Similitud: {highest_similarity:.2f}%")
+    print("Best match found:")
+    print(f"DB Hash: {best_hash}")
+    print(f"Message: {best_match}")
+    print(f"Similarity: {highest_similarity:.2f}%")
 
 
 def descifrar():
-    conn = sqlite3.connect('steganography.db')
+    import os
+
+    conn = mysql.connector.connect(
+    host=os.getenv("DB_HOST"),
+    port=int(os.getenv("DB_PORT")),
+    user=os.getenv("DB_USER"),
+    password=os.getenv("DB_PASS"),
+    database=os.getenv("DB_NAME")
+    )
+
     cursor = conn.cursor()
-    cursor.execute("SELECT " + ", ".join([f"byte{i}" for i in range(16)]) + ", message FROM messages ORDER BY ROWID DESC")
+
+    # Get latest messages
+    cursor.execute("SELECT " + ", ".join([f"byte{i}" for i in range(16)]) + ", message FROM messages ORDER BY id DESC")
     rows = cursor.fetchall()
     conn.close()
 
     if not rows:
-        print("[!] No hay mensajes en la base de datos.")
+        print("[!] No messages in database.")
         return
-
-        
 
     output_image = "./src/image/output.jpeg"
     for row in rows:
         reference_hash = ''.join(f"{b:02x}" for b in row[:-1])
-        print(f"[DEBUG] Probando con hash de referencia: {reference_hash}")
+        print(f"[DEBUG] Trying reference hash: {reference_hash}")
         extracted_hash = extract_hash_from_dct(output_image, reference_hash=reference_hash)
         if extracted_hash:
             search_match_with_byte_tolerance(extracted_hash)
             break
         else:
-            print("[!] Falló con este hash de referencia. Intentando siguiente...")
+            print("[!] Failed with this reference hash. Trying next...")
     search_match_with_byte_tolerance(extracted_hash)
 
 

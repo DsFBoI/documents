@@ -1,40 +1,40 @@
-import sqlite3
+import mysql.connector
 
 def store_hash_and_message_in_db(hash_value, message):
-    """Guarda el hash y el mensaje en la base de datos evitando duplicados."""
-    conn = sqlite3.connect('steganography.db')
+    conn = mysql.connector.connect(
+        host='172.21.48.1',
+        port=3306,
+        user='tfg',
+        password='Daniel25071005',
+        database='tfg_db'
+    )
     cursor = conn.cursor()
 
-    # Convertir hash a bytes
     hash_bytes = [int(hash_value[i:i+2], 16) for i in range(0, len(hash_value), 2)]
-
-    # Crear tabla si no existe
-    columns = ", ".join([f"byte{i} INTEGER" for i in range(len(hash_bytes))])
+    columns = ", ".join([f"byte{i} INT" for i in range(len(hash_bytes))])
     cursor.execute(f'''
         CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id INT AUTO_INCREMENT PRIMARY KEY,
             {columns},
             message TEXT
         )
     ''')
 
-    # Verificar si ya existe el mismo hash
-    where_clause = " AND ".join([f"byte{i}=?" for i in range(len(hash_bytes))])
-    cursor.execute(f"SELECT 1 FROM messages WHERE {where_clause}", hash_bytes)
+    where_clause = " AND ".join([f"byte{i}=%s" for i in range(len(hash_bytes))])
+    cursor.execute(f"SELECT 1 FROM messages WHERE {where_clause}", tuple(hash_bytes))
     if cursor.fetchone():
-        print("[!] Hash ya existe en la base de datos. No se insertó duplicado.")
+        print("[!] Hash already exists. Skipping insert.")
         conn.close()
         return
 
-    # Insertar nuevo hash y mensaje
     values = hash_bytes + [message]
-    placeholders = ", ".join(["?"] * len(values))
     column_names = ", ".join([f"byte{i}" for i in range(len(hash_bytes))]) + ", message"
+    placeholders = ", ".join(["%s"] * len(values))
 
     cursor.execute(f'''
         INSERT INTO messages ({column_names}) VALUES ({placeholders})
-    ''', values)
+    ''', tuple(values))
 
     conn.commit()
     conn.close()
-    print("[✓] Hash y mensaje insertados correctamente.")
+    print("[✓] Hash and message inserted successfully.")
