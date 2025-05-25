@@ -26,7 +26,7 @@ def compare_images_bits(image1_path, image2_path):
     total_bits = img1_bits.size
 
     # Mostrar resultados
-    print(f"Total de bits en la imagen: {total_bits}")
+    print(f"\n\nTotal de bits en la imagen: {total_bits}")
     print(f"Total de bits diferentes: {len(differences)}")
     print(f"Porcentaje de diferencias: {len(differences) / total_bits * 100:.6f}%")
 

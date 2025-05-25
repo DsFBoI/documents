@@ -1,8 +1,9 @@
 import jpeg_toolbox
 import random
 import numpy as np
-from hash_utils import generate_hash
-from db_utils import store_hash_and_message_in_db
+from src.program.hash_utils import generate_hash
+from src.program.db_utils import store_hash_and_message_in_db
+import os
 
 def hash_to_bits(hash_hex):
     """Convierte un hash hexadecimal en una lista de bits."""
@@ -11,7 +12,7 @@ def hash_to_bits(hash_hex):
 def cifrar():
     input_image = './src/image/input.jpeg'
     output_image = './src/image/output.jpeg'
-    message = "hola que tal estas"
+    message = os.environ["MESSAGE"] 
 
     # [1] Generar hash de 128 bits del mensaje
     hash_128 = generate_hash(message, bits=128)

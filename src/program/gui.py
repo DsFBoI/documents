@@ -19,7 +19,7 @@ class EsteganografiaApp:
         # Campos de conexión
         tk.Label(root, text="Host:").grid(row=0, column=0)
         self.host_entry = tk.Entry(root)
-        self.host_entry.insert(0, "localhost")
+        self.host_entry.insert(0, "172.21.48.1")
         self.host_entry.grid(row=0, column=1)
 
         tk.Label(root, text="Puerto:").grid(row=1, column=0)
@@ -29,11 +29,12 @@ class EsteganografiaApp:
 
         tk.Label(root, text="Usuario:").grid(row=2, column=0)
         self.user_entry = tk.Entry(root)
-        self.user_entry.insert(0, "root")
+        self.user_entry.insert(0, "tfg")
         self.user_entry.grid(row=2, column=1)
 
         tk.Label(root, text="Contraseña:").grid(row=3, column=0)
         self.password_entry = tk.Entry(root, show="*")
+        self.password_entry.insert(0, "Daniel25071005")
         self.password_entry.grid(row=3, column=1)
 
         tk.Label(root, text="Base de datos:").grid(row=4, column=0)
@@ -89,6 +90,7 @@ class EsteganografiaApp:
         os.environ["DB_PASS"] = self.password_entry.get()
         os.environ["DB_NAME"] = self.db_entry.get()
         os.environ["MESSAGE"] = self.message_entry.get()
+        
     
         try:
             cifrar()  # usa la lógica del encrip.py

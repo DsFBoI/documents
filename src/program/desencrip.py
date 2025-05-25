@@ -73,7 +73,7 @@ def search_match_with_byte_tolerance(extracted_hash):
     user=os.getenv("DB_USER"),
     password=os.getenv("DB_PASS"),
     database=os.getenv("DB_NAME")
-    )
+)
 
     cursor = conn.cursor()
 
@@ -115,16 +115,13 @@ def search_match_with_byte_tolerance(extracted_hash):
 
 
 def descifrar():
-    import os
-
     conn = mysql.connector.connect(
-    host=os.getenv("DB_HOST"),
-    port=int(os.getenv("DB_PORT")),
-    user=os.getenv("DB_USER"),
-    password=os.getenv("DB_PASS"),
-    database=os.getenv("DB_NAME")
+        host='172.21.48.1',
+        port=3306,
+        user='tfg',
+        password='Daniel25071005',
+        database='tfg_db'
     )
-
     cursor = conn.cursor()
 
     # Get latest messages

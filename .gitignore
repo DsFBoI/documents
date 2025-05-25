@@ -1,2 +1,7 @@
 *.venv
 jpeg-env
+image_quant2
+image_quant3
+image_quant10
+image_quant11
+image_quant6
